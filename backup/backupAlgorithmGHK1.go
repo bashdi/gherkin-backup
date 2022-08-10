@@ -14,7 +14,7 @@ type BackupAlgorithmGHK1 struct {
 	currentBackup time.Time
 }
 
-func (ghk1 *BackupAlgorithmGHK1) IsFileNewOrDifferent(targetFile string) (bool, error) {
+func (ghk1 *BackupAlgorithmGHK1) IsFileNewOrDifferent(targetFile, backupFolder string) (bool, error) {
 	//lastChangeMap init, if nil
 	if ghk1.lastChangeMap == nil {
 		ghk1.lastChangeMap = make(map[string]time.Time)

@@ -52,7 +52,7 @@ func (bp *BackupProcess) checkForFilechanges(targetFolder string) ([]string, err
 			continue
 		}
 
-		isNewOrDifferent, err := bp.backupAlgorithm.IsFileNewOrDifferent(fullPath)
+		isNewOrDifferent, err := bp.backupAlgorithm.IsFileNewOrDifferent(fullPath, bp.backupFolder)
 		if err != nil {
 			log.Println(err)
 			continue

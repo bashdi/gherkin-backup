@@ -10,16 +10,16 @@ import (
 )
 
 var (
-	intervall    int    = 120
+	intervall    int    = 10
 	targetFolder string = "targetFolder"
 	backupFolder string = "backupFolder"
 )
 
 func main() {
-	getParameters()
+	//getParameters()
 
 	log.Println("gherkin-backup started")
-	backupProcess := backup.NewBackupProcess(targetFolder, backupFolder, &backup.BackupAlgorithmGHK1{})
+	backupProcess := backup.NewBackupProcess(targetFolder, backupFolder, &backup.BackupAlgorithmGHK2{})
 
 	for {
 		err := backupProcess.DoIt()
