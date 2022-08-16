@@ -26,19 +26,12 @@ func (bp *BackupProcess) DoIt() error {
 
 	timestamp := time.Now()
 
-	for _, targetFile := range newOrDifferentFiles {
-		_, err := bp.backupAlgorithm.Backup(bp.targetFolder, targetFile, bp.backupFolder, timestamp)
-		if err != nil {
-			log.Println(err)
-		}
-		log.Printf("Backup created for %s", targetFile)
-	}
-
-	return nil
+	err = bp.backupAlgorithm.Backup(newOrDifferentFiles, bp.backupFolder, timestamp)
+	return err
 }
 
-func (bp *BackupProcess) checkForFilechanges(targetFolder string) ([]string, error) {
-	changedFilesList := []string{}
+func (bp *BackupProcess) checkForFilechanges(targetFolder string) ([]FilechangeInfo, error) {
+	changedFilesList := []FilechangeInfo{}
 	files, err := os.ReadDir(targetFolder)
 	if err != nil {
 		return changedFilesList, err
@@ -52,15 +45,17 @@ func (bp *BackupProcess) checkForFilechanges(targetFolder string) ([]string, err
 			continue
 		}
 
-		isNewOrDifferent, err := bp.backupAlgorithm.IsFileNewOrDifferent(fullPath, bp.backupFolder)
+		isNewOrDifferent, err := bp.backupAlgorithm.IsFileChanged(fullPath, bp.backupFolder)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
 
 		if isNewOrDifferent {
-			changedFilesList = append(changedFilesList, fullPath)
+			log.Printf("File: %s changed or new", fullPath)
 		}
+
+		changedFilesList = append(changedFilesList, FilechangeInfo{Path: fullPath, IsChanged: isNewOrDifferent})
 	}
 
 	return changedFilesList, nil

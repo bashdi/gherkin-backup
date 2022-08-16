@@ -2,6 +2,8 @@ package backup
 
 import (
 	"encoding/hex"
+	"encoding/json"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -21,7 +23,7 @@ type BackupAlgorithmGHK2 struct {
 	badgerOptions       badger.Options
 }
 
-func (ghk2 *BackupAlgorithmGHK2) IsFileNewOrDifferent(targetFile, backupFolder string) (bool, error) {
+func (ghk2 *BackupAlgorithmGHK2) IsFileChanged(targetFile, backupFolder string) (bool, error) {
 	if !ghk2.isBadgerOptionsInit {
 		ghk2.isBadgerOptionsInit = true
 
@@ -81,49 +83,88 @@ func (ghk2 *BackupAlgorithmGHK2) IsFileNewOrDifferent(targetFile, backupFolder s
 	return isNewOrModified, nil
 }
 
-func (ghk2 *BackupAlgorithmGHK2) Backup(targetFolder, targetFile, backupFolder string, timestamp time.Time) (bool, error) {
+func (ghk2 *BackupAlgorithmGHK2) Backup(targetFiles []FilechangeInfo, backupFolder string, timestamp time.Time) error {
 	db, err := badger.Open(ghk2.badgerOptions)
 	if err != nil {
-		return false, err
+		return err
 	}
 	defer db.Close()
 
-	filedepotPath := filepath.Join(backupFolder, filedepotFolderName)
-	os.Mkdir(filedepotPath, os.ModePerm)
-	if err != nil {
-		return false, err
-	}
+	backupFiles := []Ghk2File{}
+	isAnyFileChange := false
 
-	hash, err := utilities.GetMd5HashForFile(targetFile)
-	if err != nil {
-		return false, err
-	}
-
-	hashString := hex.EncodeToString(hash[:])
-
-	//check if file allready in depot or needs to copied
-	isFileInDepot := true
-	db.View(func(txn *badger.Txn) error {
-		_, err := txn.Get([]byte(hashString))
+	for _, targetFile := range targetFiles {
+		filedepotPath := filepath.Join(backupFolder, filedepotFolderName)
+		os.Mkdir(filedepotPath, os.ModePerm)
 		if err != nil {
-			isFileInDepot = false
+			return err
 		}
-		return nil
-	})
 
-	if !isFileInDepot {
-		extension := filepath.Ext(targetFile)
-		depotFile := filepath.Join(filedepotPath, hashString)
-		depotFile = depotFile + extension
-		utilities.CopyFile(targetFile, depotFile)
+		hash, err := utilities.GetMd5HashForFile(targetFile.Path)
+		if err != nil {
+			return err
+		}
 
-		err := db.Update(func(txn *badger.Txn) error {
-			return txn.Set([]byte(hashString), []byte(depotFile))
+		hashString := hex.EncodeToString(hash[:])
+
+		backupFiles = append(backupFiles, Ghk2File{Path: targetFile.Path, Hash: hashString})
+		if !targetFile.IsChanged {
+			continue
+		}
+		isAnyFileChange = true
+
+		//check if file allready in depot or needs to copied
+		isFileInDepot := true
+		db.View(func(txn *badger.Txn) error {
+			_, err := txn.Get([]byte(hashString))
+			if err != nil {
+				isFileInDepot = false
+			}
+			return nil
 		})
-		if err != nil {
-			return false, err
+
+		if !isFileInDepot {
+			extension := filepath.Ext(targetFile.Path)
+			depotFile := filepath.Join(filedepotPath, hashString)
+			depotFile = depotFile + extension
+			utilities.CopyFile(targetFile.Path, depotFile)
+
+			err := db.Update(func(txn *badger.Txn) error {
+				return txn.Set([]byte(hashString), []byte(depotFile))
+			})
+			if err != nil {
+				return err
+			}
 		}
 	}
 
-	return true, nil
+	if isAnyFileChange {
+		backupState := Ghk2BackupState{Timestamp: timestamp.Unix(), Files: backupFiles}
+
+		file, err := json.MarshalIndent(backupState, "", "")
+		if err != nil {
+			return nil
+		}
+
+		err = ioutil.WriteFile(filepath.Join(backupFolder, timestamp.Format("2006_01_02_15_04_05")+".json"), file, 0644)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (ghk2 *BackupAlgorithmGHK2) Restore(targetFolder, backupFolder, timestamp time.Time) error {
+	return nil
+}
+
+type Ghk2BackupState struct {
+	Timestamp int64
+	Files     []Ghk2File
+}
+
+type Ghk2File struct {
+	Path string
+	Hash string
 }
